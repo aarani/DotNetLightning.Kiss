@@ -79,12 +79,12 @@ module private Helpers =
     let prefixValues = prefixes |> Map.toList |> List.map(fun (_, v) -> v)
         
     let checkAndGetPrefixFromHrp (hrp: string) =
-        let maybePrefix = prefixValues |> List.filter(fun p -> hrp.StartsWith(p)) |> List.tryExactlyOne
+        let maybePrefix = prefixValues |> List.filter(fun p -> hrp.StartsWith(p))
         match maybePrefix with
-        | None ->
-            Error(sprintf "Unknown prefix type %s! hrp must be either of %A" hrp prefixValues)
-        | Some(prefix) ->
+        | prefix :: [] ->
             Ok(prefix)
+        | _ ->
+            Error(sprintf "Unknown prefix type %s! hrp must be either of %A" hrp prefixValues)
         
     /// maxInvoiceLength is the maximum total length an invoice can have.
     /// This is chosen to be the maximum number of bytes that can fit into a
@@ -175,16 +175,16 @@ type FallbackAddress = private {
     member this.ToAddress(prefix: string) =
         match this.Version with
         | 17uy when prefix = "lnbc" ->
-            let data = Array.concat (seq { [| Helpers.PREFIX_ADDRESS_PUBKEYHASH |]; this.Data })
+            let data = Array.concat (seq { yield [| Helpers.PREFIX_ADDRESS_PUBKEYHASH |]; yield this.Data })
             Helpers.base58check.EncodeData(data)
         | 18uy when prefix = "lnbc" ->
-            let data = Array.concat (seq { [| Helpers.PREFIX_ADDRESS_SCRIPTHASH |]; this.Data })
+            let data = Array.concat (seq { yield [| Helpers.PREFIX_ADDRESS_SCRIPTHASH |]; yield this.Data })
             Helpers.base58check.EncodeData(data)
         | 17uy when prefix = "lntb" || prefix = "lnbcrt" ->
-            let data = Array.concat (seq { [| Helpers.PREFIX_ADDRESS_PUBKEYHASH_TESTNET |]; this.Data })
+            let data = Array.concat (seq { yield [| Helpers.PREFIX_ADDRESS_PUBKEYHASH_TESTNET |]; yield this.Data })
             Helpers.base58check.EncodeData(data)
         | 18uy when prefix = "lnbc" || prefix = "lnbcrt" ->
-            let data = Array.concat (seq { [| Helpers.PREFIX_ADDRESS_SCRIPTHASH_TESTNET |]; this.Data })
+            let data = Array.concat (seq { yield [| Helpers.PREFIX_ADDRESS_SCRIPTHASH_TESTNET |]; yield this.Data })
             Helpers.base58check.EncodeData(data)
         | v when prefix = "lnbc" ->
             let encoder = Bech32Encoder(Encoders.ASCII.DecodeData("bc"))
@@ -302,10 +302,18 @@ type TaggedFields = {
         this.Fields |> List.choose(function FallbackAddressTaggedField a -> Some(a) | _ -> None)
         
     member this.ExplicitNodeId =
-        this.Fields |> Seq.choose(function NodeIdTaggedField x -> Some x | _ -> None) |> Seq.tryExactlyOne
+        match
+            this.Fields |> Seq.choose(function NodeIdTaggedField x -> Some x | _ -> None) |> List.ofSeq
+            with
+            | l :: [] -> Some l
+            | _ -> None
         
     member this.FeatureBit =
-        this.Fields |> Seq.choose(function FeaturesTaggedField fb -> Some fb | _ -> None) |> Seq.tryExactlyOne
+        match
+            this.Fields |> Seq.choose(function FeaturesTaggedField fb -> Some fb | _ -> None) |> List.ofSeq
+            with
+            | l :: [] -> Some l
+            | _ -> None
         
     member this.CheckSanity() =
         let pHashes = this.Fields |> List.choose(function PaymentHashTaggedField x -> Some x | _ -> None)
@@ -535,9 +543,13 @@ type PaymentRequest = private {
         |> Seq.exactlyOne // we assured in constructor that it has only one
         
     member this.PaymentSecret =
-        this.Tags.Fields
-        |> Seq.choose(function TaggedField.PaymentSecretTaggedField ps -> Some ps | _ -> None)
-        |> Seq.tryExactlyOne
+        match
+            this.Tags.Fields
+            |> Seq.choose(function TaggedField.PaymentSecretTaggedField ps -> Some ps | _ -> None)
+            |> List.ofSeq
+            with
+            | l :: [] -> Some l
+            | _ -> None
         
     member this.Description =
         this.Tags.Fields
@@ -558,21 +570,31 @@ type PaymentRequest = private {
         
     /// absolute expiry date.
     member this.Expiry =
-        this.Tags.Fields
-        |> Seq.choose(function ExpiryTaggedField e -> Some (e) | _ -> None)
-        |> Seq.tryExactlyOne
-        |> Option.defaultValue (this.Timestamp + PaymentConstants.DEFAULT_EXPIRY_SECONDS)
+        match
+            this.Tags.Fields
+            |> Seq.choose(function ExpiryTaggedField e -> Some (e) | _ -> None)
+            |> List.ofSeq
+            with
+            | l :: [] -> l
+            | _ -> this.Timestamp + PaymentConstants.DEFAULT_EXPIRY_SECONDS
         
     member this.MinFinalCLTVExpiryDelta =
-        this.Tags.Fields
-        |> Seq.choose(function MinFinalCltvExpiryTaggedField cltvE -> Some (cltvE) | _ -> None)
-        |> Seq.tryExactlyOne
-        |> Option.defaultValue (PaymentConstants.DEFAULT_MINIMUM_CLTVEXPIRY)
+        match
+            this.Tags.Fields
+            |> Seq.choose(function MinFinalCltvExpiryTaggedField cltvE -> Some (cltvE) | _ -> None)
+            |> List.ofSeq
+            with
+            | l :: [] -> l
+            | _ -> PaymentConstants.DEFAULT_MINIMUM_CLTVEXPIRY
 
     member this.Features =
-        this.Tags.Fields
-        |> Seq.choose(function FeaturesTaggedField f -> Some f | _ -> None)
-        |> Seq.tryExactlyOne
+        match
+            this.Tags.Fields
+            |> Seq.choose(function FeaturesTaggedField f -> Some f | _ -> None)
+            |> List.ofSeq
+            with
+            | l :: [] -> Some l
+            | _ -> None
         
     member this.IsExpired =
         this.Expiry <= DateTimeOffset.UtcNow
@@ -587,7 +609,7 @@ type PaymentRequest = private {
                      TaggedFields = this.Tags
                      Signature = None }
         let bin = data.ToBytes()
-        let msg = Array.concat(seq { hrp; bin })
+        let msg = Array.concat(seq { yield hrp; yield bin })
         Hashes.SHA256(msg) |> uint256
         
     member this.Sign(privKey: Key, ?forceLowR: bool) =
@@ -643,7 +665,7 @@ type PaymentRequest = private {
                         if (!remainder <> 0) then
                             byteCount <- byteCount + 1
                     
-                        seq { (hrp |> Helpers.utf8.GetBytes); (reader.ReadBytes(byteCount)) }
+                        seq { yield (hrp |> Helpers.utf8.GetBytes); yield (reader.ReadBytes(byteCount)) }
                         |> Array.concat
                     let signatureInNBitcoinFormat = Array.zeroCreate(65)
                     Array.blit (sigCompact.ToBytesCompact()) 0 signatureInNBitcoinFormat 1 64

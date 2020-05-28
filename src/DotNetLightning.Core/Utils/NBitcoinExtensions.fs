@@ -28,10 +28,13 @@ module NBitcoinExtensions =
 
     type PSBT with
         member this.GetMatchingSig(pubkey: PubKey) =
+          let li =
             this.Inputs
             |> Seq.collect (fun i -> i.PartialSigs)
             |> Seq.choose(fun kv -> if kv.Key = pubkey then Some kv.Value else None)
-            |> Seq.tryExactlyOne
+          match List.ofSeq li with
+          | l :: [] -> Some l
+          | _ -> None
 
         member this.GetTxId() =
             this.GetGlobalTransaction().GetTxId()
