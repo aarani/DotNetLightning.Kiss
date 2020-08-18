@@ -40,9 +40,6 @@ jobs:
       run: |
         DEBIAN_FRONTEND=noninteractive sudo apt install -y msbuild fsharp nuget
 
-        # override TargetFrameworks to not build netstandard2.1 (incompatible with Mono)
-        sed -i "7i<PropertyGroup><TargetFrameworks>netstandard2.0</TargetFrameworks></PropertyGroup>" src/DotNetLightning.Core/DotNetLightning.Core.fsproj
-
         nuget restore DotNetLightning.sln
         msbuild src/DotNetLightning.Core/DotNetLightning.Core.fsproj -p:BouncyCastle=True
 
