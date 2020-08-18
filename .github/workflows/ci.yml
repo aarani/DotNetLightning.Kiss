@@ -41,5 +41,5 @@ jobs:
         DEBIAN_FRONTEND=noninteractive sudo apt install -y msbuild fsharp nuget
 
         nuget restore DotNetLightning.sln
-        msbuild src/DotNetLightning.Core/DotNetLightning.Core.fsproj -p:BouncyCastle=True
+        msbuild src/DotNetLightning.Core/DotNetLightning.Core.fsproj -p:BouncyCastle=True -p:TargetFramework=netstandard2.0
 
