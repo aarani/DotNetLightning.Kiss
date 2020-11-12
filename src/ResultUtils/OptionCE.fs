@@ -58,7 +58,7 @@ module OptionCE =
       else
           this.Bind(this.Run generator, fun () -> this.While (guard, generator))
 
-    member this.For<'T>(sequence: #seq<'T>, binder: 'T -> Option<unit>)
+    member this.For<'T>(sequence: seq<'T>, binder: 'T -> Option<unit>)
                            : Option<unit> =
       this.Using(sequence.GetEnumerator (), fun enumerator ->
         this.While(enumerator.MoveNext,

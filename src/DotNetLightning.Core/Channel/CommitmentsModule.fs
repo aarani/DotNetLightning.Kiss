@@ -484,8 +484,9 @@ module RemoteForceClose =
                     perCommitmentPoint.DerivePaymentPrivKey
                         localChannelPrivKeys.PaymentBasepointSecret
                 transactionBuilder.AddKeys (localPaymentPrivKey.RawKey())
-                transactionBuilder.AddCoins
-                    (Coin(transaction, uint32 toRemoteIndex))
+                |> ignore
+                transactionBuilder.AddCoins (Coin(transaction, uint32 toRemoteIndex))
+                |> ignore
                 true
 
         let spentToLocalOutput =
@@ -510,8 +511,10 @@ module RemoteForceClose =
                             localChannelPrivKeys.RevocationBasepointSecret
                     transactionBuilder.Extensions.Add (CommitmentToLocalExtension())
                     transactionBuilder.AddKeys (revocationPrivKey.RawKey())
+                    |> ignore
                     transactionBuilder.AddCoins
                         (ScriptCoin(transaction, uint32 toLocalIndex, toLocalScriptPubKey))
+                    |> ignore
                     true
 
         do! check (spentToRemoteOutput || spentToLocalOutput)
@@ -561,8 +564,10 @@ module RemoteForceClose =
                 localChannelPrivKeys.DelayedPaymentBasepointSecret
         transactionBuilder.Extensions.Add (CommitmentToLocalExtension())
         transactionBuilder.AddKeys (delayedPaymentPrivKey.RawKey())
+        |> ignore
         transactionBuilder.AddCoins
             (ScriptCoin(transaction, uint32 toLocalIndex, toLocalScriptPubKey))
+        |> ignore
 
         return transactionBuilder
     }
