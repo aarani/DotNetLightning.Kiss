@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <VersionPrefix>1.1.2</VersionPrefix>
     <TargetFrameworks>netstandard2.0;netstandard2.1</TargetFrameworks>
@@ -79,6 +79,7 @@
     <Compile Include="Channel\ChannelError.fs" />
     <Compile Include="Channel\CommitmentsModule.fs" />
     <Compile Include="Channel\ChannelValidation.fs" />
+    <Compile Include="Utils\CommitmentSignatures.fs" />
     <Compile Include="Channel\Channel.fs" />
     <Compile Include="Payment\PaymentConstants.fs" />
     <Compile Include="Payment\PaymentEvents.fs" />

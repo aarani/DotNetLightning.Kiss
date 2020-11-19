@@ -23,6 +23,8 @@ type Channel = {
     NodeSecret: NodeSecret
     State: ChannelState
     Network: Network
+    RevocationSignatures: CommitmentSignatures
+    RemoteSignatures: CommitmentSignatures
  }
         with
         static member Create (config: ChannelConfig,
@@ -44,6 +46,8 @@ type Channel = {
                 NodeSecret = nodeSecret
                 State = WaitForInitInternal
                 Network = n
+                RevocationSignatures = CommitmentSignatures()
+                RemoteSignatures = CommitmentSignatures()
             }
         static member CreateCurried = curry7 (Channel.Create)
 
