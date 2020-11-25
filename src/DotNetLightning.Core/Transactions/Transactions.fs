@@ -324,7 +324,7 @@ module Transactions =
             |> List.filter(fun v -> v.Direction = In)
             |> List.filter(fun v -> (v.Add.Amount.ToMoney()) >= (dustLimit + htlcSuccessFee))
 
-    let internal commitTxFee (dustLimit: Money) (spec: CommitmentSpec): Money =
+    let commitTxFee (dustLimit: Money) (spec: CommitmentSpec): Money =
         let trimmedOfferedHTLCs = trimOfferedHTLCs (dustLimit) (spec)
         let trimmedReceivedHTLCs = trimReceivedHTLCs dustLimit spec
         let weight = COMMIT_WEIGHT + 172UL * (uint64 trimmedOfferedHTLCs.Length + uint64 trimmedReceivedHTLCs.Length)
