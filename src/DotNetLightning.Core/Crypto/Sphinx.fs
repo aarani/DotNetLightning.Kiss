@@ -88,19 +88,34 @@ module Sphinx =
         computeEphemeralPublicKeysAndSharedSecretsCore
             (sessionKey) (pubKeys |> List.tail) ([ephemeralPK0]) ([blindingFactor0]) ([secret0])
 
-    let rec internal generateFiller (keyType: string) (sharedSecrets: Key list) (hopSize: int) (maxNumberOfHops: int option) =
+    let rec internal generateFiller (keyType: string) (payloads: byte[] list) (sharedSecrets: Key list) (hopSize: int) (maxNumberOfHops: int option) =
         let maxHopN = defaultArg maxNumberOfHops MaxHops
-        sharedSecrets
-        |> List.fold (fun (padding: byte[]) (secret: Key) ->
-            let key = generateKey(keyType, secret.ToBytes())
-            let padding1 = Array.append padding (zeros hopSize)
-            let stream =
-                let s = generateStream(key, hopSize * (maxHopN + 1))
-                s.[s.Length - padding1.Length .. s.Length - 1] // take padding1 from tale
-            assert (stream.Length = padding1.Length)
-            xor(padding1, stream)
-            ) [||]
+        let filler_size = 
+            payloads.[1..] |>
+            List.sumBy (fun payload -> payload.Length + MacLength)
 
+        let mutable filler: byte[] = 
+            Array.zeroCreate filler_size
+
+        for i = 0 to payloads.Length - 2 do
+            let filler_offset = 
+                payloads.[..i-1] |>
+                List.sumBy (fun payload -> payload.Length + MacLength)
+
+            //todo: literall
+            let filler_start = 1300 - filler_offset
+            let filler_end = 1300 + payloads.[i].Length  + MacLength
+            let filler_len = filler_end - filler_start
+            let key = generateKey(keyType, sharedSecrets.[i].ToBytes())
+            let stream =
+                let s = generateStream(key, filler_end)
+                s.[filler_start..filler_end-1]
+            //todo: use xor func
+
+            for i = 0 to filler_len - 1 do
+                filler.[i] <- filler.[i] ^^^ stream.[i]
+
+        filler
     type ParsedPacket = {
         Payload: byte[]
         NextPacket: OnionPacket
@@ -152,7 +167,8 @@ module Sphinx =
          routingInfoFiller: byte[] option) =
             let filler = defaultArg routingInfoFiller ([||])
             let nextRoutingInfo =
-                let routingInfo1 = seq [ payload; packet.HMAC.ToBytes(); (packet.HopData |> Array.skipBack(PayloadLength + MacLength)) ]
+                let payloadLen = payload.Length
+                let routingInfo1 = seq [ payload; packet.HMAC.ToBytes(); (packet.HopData |> Array.skipBack(payloadLen + MacLength)) ]
                                    |> Array.concat
                 let routingInfo2 =
                     let rho = generateKey("rho", sharedSecret)
@@ -180,7 +196,7 @@ module Sphinx =
         with
             static member Create (sessionKey: Key, pubKeys: PubKey list, payloads: byte[] list, ad: byte[]) =
                 let (ephemeralPubKeys, sharedSecrets) = computeEphemeralPublicKeysAndSharedSecrets (sessionKey) (pubKeys)
-                let filler = generateFiller "rho" sharedSecrets.[0..sharedSecrets.Length - 2] (PayloadLength + MacLength) (Some MaxHops)
+                let filler = generateFiller "rho" payloads sharedSecrets (PayloadLength + MacLength) (Some MaxHops)
 
                 let lastPacket = makeNextPacket(payloads |> List.last,
                                                 ad,
