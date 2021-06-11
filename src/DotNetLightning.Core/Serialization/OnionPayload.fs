@@ -48,7 +48,7 @@ type OnionPayload =
                     |> Result.map (Array.map(HopPayloadTLV.FromGenericTLV))
                 return tlvs |> TLVPayload
             }
-            
+
     member this.ToBytes() =
         match this with
         | Legacy o -> o.ToBytes()

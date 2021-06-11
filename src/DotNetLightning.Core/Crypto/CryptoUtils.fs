@@ -20,6 +20,7 @@ type CryptoError =
     | InvalidErrorPacketLength of expected: int * actual: int
     | InvalidPublicKey of byte[]
     | InvalidMessageLength of int
+    | UnknownPayload 
     | FailedToParseErrorPacket of packet: byte[] * sharedSecrets: (byte[] * PubKey) list
     
     member this.Message =

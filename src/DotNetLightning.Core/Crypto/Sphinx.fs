@@ -6,9 +6,11 @@ open NBitcoin
 open DotNetLightning.Utils
 open DotNetLightning.Serialization
 open DotNetLightning.Serialization.Msgs
+open DotNetLightning.Core.Utils.Extensions
 
 open ResultUtils
 open ResultUtils.Portability
+open System
 
 module Sphinx =
     open NBitcoin.Crypto
@@ -88,8 +90,7 @@ module Sphinx =
         computeEphemeralPublicKeysAndSharedSecretsCore
             (sessionKey) (pubKeys |> List.tail) ([ephemeralPK0]) ([blindingFactor0]) ([secret0])
 
-    let rec internal generateFiller (keyType: string) (payloads: byte[] list) (sharedSecrets: Key list) (hopSize: int) (maxNumberOfHops: int option) =
-        let maxHopN = defaultArg maxNumberOfHops MaxHops
+    let rec internal generateFiller (keyType: string) (payloads: byte[] list) (sharedSecrets: Key list) =
         let filler_size = 
             payloads.[1..] |>
             List.sumBy (fun payload -> payload.Length + MacLength)
@@ -122,36 +123,47 @@ module Sphinx =
         SharedSecret: byte[]
     }
     let parsePacket (nodePrivateKey: Key) (ad: byte[]) (rawPacket: byte[]): Result<ParsedPacket, CryptoError> =
-        if (rawPacket.Length <> PACKET_LENGTH) then
-             CryptoError.InvalidErrorPacketLength (PACKET_LENGTH, rawPacket.Length)
-            |> Error
-        else
-            let packet = ILightningSerializable.fromBytes<OnionPacket>(rawPacket)
-            if not (PubKey.Check(packet.PublicKey, true)) then
-                InvalidPublicKey(packet.PublicKey) |> Error
+        result {
+            if (rawPacket.Length <> PACKET_LENGTH) then
+                return! CryptoError.InvalidErrorPacketLength (PACKET_LENGTH, rawPacket.Length)
+                        |> Error
             else
-                let pk = packet.PublicKey |> PubKey
-                let ss = computeSharedSecret(pk, nodePrivateKey)
-                let mu = generateKey("mu", ss)
-                let check =
-                    let msg = Array.concat (seq [ packet.HopData; ad ])
-                    mac(mu, msg)
-                if check <> packet.HMAC then
-                    CryptoError.BadMac |> Error
-                else
-                    let rho = generateKey("rho", ss)
-                    let bin =
-                        let d = Array.concat (seq [packet.HopData; zeros(PayloadLength + MacLength)])
-                        let dataLength = PayloadLength + MacLength + MaxHops * (PayloadLength + MacLength)
-                        xor(d, generateStream(rho, dataLength))
+               let packet = ILightningSerializable.fromBytes<OnionPacket>(rawPacket)
+               if not (PubKey.Check(packet.PublicKey, true)) then
+                   return! InvalidPublicKey(packet.PublicKey) |> Error
+               else
+                   let pk = packet.PublicKey |> PubKey
+                   let ss = computeSharedSecret(pk, nodePrivateKey)
+                   let mu = generateKey("mu", ss)
+                   let check =
+                       let msg = Array.concat (seq [ packet.HopData; ad ])
+                       mac(mu, msg)
+                   if check <> packet.HMAC then
+                       return! CryptoError.BadMac |> Error
+                   else
+                       let rho = generateKey("rho", ss)
+                       let bin =
+                           let d = Array.concat (seq [packet.HopData; zeros(1300)])
+                           xor(d, generateStream(rho, 2600))
 
-                    let payload = bin.[0..PayloadLength - 1]
-                    let hmac = bin.[PayloadLength .. PayloadLength + MacLength - 1] |> uint256
-                    let nextRouteInfo = bin.[PayloadLength + MacLength..]
-                    let nextPubKey = blind(pk) (computeBlindingFactor(pk) (new Key(ss)))
-                    { ParsedPacket.Payload = payload
-                      NextPacket = { Version = VERSION; PublicKey = nextPubKey.ToBytes(); HMAC= hmac; HopData = nextRouteInfo }
-                      SharedSecret = ss } |> Ok
+                       let! payloadLength =
+                           match bin.[0] with 
+                           | 0uy -> result { return 33 }
+                           | _ ->
+                               result {
+                                   let! l, _ = bin.TryPopVarInt()
+                                   return (l |> int) + l.ToVarInt().Length
+                               }
+                           |> Result.setError (UnknownPayload)
+
+                       let hmac = bin.[payloadLength .. payloadLength + MacLength - 1] |> uint256
+                       let payload = bin.[..payloadLength - 1]
+                       let nextRouteInfo = bin.[payloadLength + MacLength..payloadLength + MacLength + 1299 ]
+                       let nextPubKey = blind(pk) (computeBlindingFactor(pk) (new Key(ss)))
+                       return! { ParsedPacket.Payload = payload
+                                 NextPacket = { Version = VERSION; PublicKey = nextPubKey.ToBytes(); HMAC= hmac; HopData = nextRouteInfo }
+                                 SharedSecret = ss } |> Ok
+        }
 
     /// Compute the next packet from the current packet and node parameters.
     /// Packets are constructed in reverse order:
@@ -165,6 +177,7 @@ module Sphinx =
          sharedSecret: byte[],
          packet: OnionPacket,
          routingInfoFiller: byte[] option) =
+
             let filler = defaultArg routingInfoFiller ([||])
             let nextRoutingInfo =
                 let payloadLen = payload.Length
@@ -187,6 +200,13 @@ module Sphinx =
                               HMAC = nextHmac }
             nextPacket
 
+    module PacketFiller =
+        let DeterministicPacketFiller (sessionKey: Key) =
+            generateStream(generateKey("pad",sessionKey.ToBytes()), 1300)
+        let BlankPacketFiller (_: Key)=
+            Array.zeroCreate 1300
+
+
     type PacketAndSecrets = {
         Packet: OnionPacket
         /// Shared secrets (one per node in the route). Known (and needed) only if you're creating the
@@ -194,15 +214,16 @@ module Sphinx =
         SharedSecrets: (Key * PubKey) list
     }
         with
-            static member Create (sessionKey: Key, pubKeys: PubKey list, payloads: byte[] list, ad: byte[]) =
+            static member Create (sessionKey: Key, pubKeys: PubKey list, payloads: byte[] list, ad: byte[], packetFiller: Key -> byte[]) =
                 let (ephemeralPubKeys, sharedSecrets) = computeEphemeralPublicKeysAndSharedSecrets (sessionKey) (pubKeys)
-                let filler = generateFiller "rho" payloads sharedSecrets (PayloadLength + MacLength) (Some MaxHops)
-
+                let filler = generateFiller "rho" payloads sharedSecrets
+                let lastPacket = {OnionPacket.LastPacket with HopData = packetFiller(sessionKey)}
+                    
                 let lastPacket = makeNextPacket(payloads |> List.last,
                                                 ad,
                                                 ephemeralPubKeys |> List.last,
                                                 (sharedSecrets |> List.last |> fun ss -> ss.ToBytes()),
-                                                OnionPacket.LastPacket,
+                                                lastPacket,
                                                 Some(filler))
                 let rec loop (hopPayloads: byte[] list, ephKeys: PubKey list, ss: Key list, packet: OnionPacket) =
                     if (hopPayloads.IsEmpty) then

@@ -10,6 +10,7 @@ open DotNetLightning.Utils.OnionError
 open DotNetLightning.Serialization.Msgs
 open DotNetLightning.Crypto
 open DotNetLightning.Crypto.Sphinx
+open DotNetLightning.Serialization
 
 let hex = NBitcoin.DataEncoders.HexEncoder()
 
@@ -35,6 +36,13 @@ let payloads = [ "00000000000000000000000000000000000000000000000000000000000000
                  "000303030303030303000000030000000300000000000000000000000000000000"
                  "000404040404040404000000040000000400000000000000000000000000000000" ]
                |> List.map(hex.DecodeData)
+
+let tlvPayloads = ["000000000000000000000000000000000000000000000000000000000000000000"
+                   "140101010101010101000000000000000100000001"
+                   "fd0100000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"
+                   "140303030303030303000000000000000300000003"
+                   "000404040404040404000000000000000400000004000000000000000000000000" ]
+                  |>List.map (hex.DecodeData)
 
 let associatedData = "4242424242424242424242424242424242424242424242424242424242424242" |> hex.DecodeData
 
@@ -67,13 +75,13 @@ let bolt4Tests1 =
 
         testCase "generate filler" <| fun _ ->
             let (_, sharedSecrets) = computeEphemeralPublicKeysAndSharedSecrets sessionKey pubKeys
-            let filler = generateFiller "rho" sharedSecrets.[0..sharedSecrets.Length - 2] (PayloadLength + MacLength) (Some(20))
+            let filler = generateFiller "rho" payloads sharedSecrets 
             let expectedFiller = "c6b008cf6414ed6e4c42c291eb505e9f22f5fe7d0ecdd15a833f4d016ac974d33adc6ea3293e20859e87ebfb937ba406abd025d14af692b12e9c9c2adbe307a679779259676211c071e614fdb386d1ff02db223a5b2fae03df68d321c7b29f7c7240edd3fa1b7cb6903f89dc01abf41b2eb0b49b6b8d73bb0774b58204c0d0e96d3cce45ad75406be0bc009e327b3e712a4bd178609c00b41da2daf8a4b0e1319f07a492ab4efb056f0f599f75e6dc7e0d10ce1cf59088ab6e873de377343880f7a24f0e36731a0b72092f8d5bc8cd346762e93b2bf203d00264e4bc136fc142de8f7b69154deb05854ea88e2d7506222c95ba1aab065c8a851391377d3406a35a9af3ac" |> hex.DecodeData
             Expect.equal filler expectedFiller ""
 
         testCase "Create packet (reference test vector)" <| fun _ ->
             let (onion, _ss) =
-                let p = PacketAndSecrets.Create (sessionKey, pubKeys, payloads, associatedData)
+                let p = PacketAndSecrets.Create (sessionKey, pubKeys, payloads, associatedData, PacketFiller.BlankPacketFiller)
                 (p.Packet, p.SharedSecrets)
             let expectedPacket =
                 "0002eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619e5f14350c2a76fc232b5e46d421e9615471ab9e0bc887beff8c95fdb878f7b3a716a996c7845c93d90e4ecbb9bde4ece2f69425c99e4bc820e44485455f135edc0d10f7d61ab590531cf08000179a333a347f8b4072f216400406bdf3bf038659793d4a1fd7b246979e3150a0a4cb052c9ec69acf0f48c3d39cd55675fe717cb7d80ce721caad69320c3a469a202f1e468c67eaf7a7cd8226d0fd32f7b48084dca885d56047694762b67021713ca673929c163ec36e04e40ca8e1c6d17569419d3039d9a1ec866abe044a9ad635778b961fc0776dc832b3a451bd5d35072d2269cf9b040f6b7a7dad84fb114ed413b1426cb96ceaf83825665ed5a1d002c1687f92465b49ed4c7f0218ff8c6c7dd7221d589c65b3b9aaa71a41484b122846c7c7b57e02e679ea8469b70e14fe4f70fee4d87b910cf144be6fe48eef24da475c0b0bcc6565ae82cd3f4e3b24c76eaa5616c6111343306ab35c1fe5ca4a77c0e314ed7dba39d6f1e0de791719c241a939cc493bea2bae1c1e932679ea94d29084278513c77b899cc98059d06a27d171b0dbdf6bee13ddc4fc17a0c4d2827d488436b57baa167544138ca2e64a11b43ac8a06cd0c2fba2d4d900ed2d9205305e2d7383cc98dacb078133de5f6fb6bed2ef26ba92cea28aafc3b9948dd9ae5559e8bd6920b8cea462aa445ca6a95e0e7ba52961b181c79e73bd581821df2b10173727a810c92b83b5ba4a0403eb710d2ca10689a35bec6c3a708e9e92f7d78ff3c5d9989574b00c6736f84c199256e76e19e78f0c98a9d580b4a658c84fc8f2096c2fbea8f5f8c59d0fdacb3be2802ef802abbecb3aba4acaac69a0e965abd8981e9896b1f6ef9d60f7a164b371af869fd0e48073742825e9434fc54da837e120266d53302954843538ea7c6c3dbfb4ff3b2fdbe244437f2a153ccf7bdb4c92aa08102d4f3cff2ae5ef86fab4653595e6a5837fa2f3e29f27a9cde5966843fb847a4a61f1e76c281fe8bb2b0a181d096100db5a1a5ce7a910238251a43ca556712eaadea167fb4d7d75825e440f3ecd782036d7574df8bceacb397abefc5f5254d2722215c53ff54af8299aaaad642c6d72a14d27882d9bbd539e1cc7a527526ba89b8c037ad09120e98ab042d3e8652b31ae0e478516bfaf88efca9f3676ffe99d2819dcaeb7610a626695f53117665d267d3f7abebd6bbd6733f645c72c389f03855bdf1e4b8075b516569b118233a0f0971d24b83113c0b096f5216a207ca99a7cddc81c130923fe3d91e7508c9ac5f2e914ff5dccab9e558566fa14efb34ac98d878580814b94b73acbfde9072f30b881f7f0fff42d4045d1ace6322d86a97d164aa84d93a60498065cc7c20e636f5862dc81531a88c60305a2e59a985be327a6902e4bed986dbf4a0b50c217af0ea7fdf9ab37f9ea1a1aaa72f54cf40154ea9b269f1a7c09f9f43245109431a175d50e2db0132337baa0ef97eed0fcf20489da36b79a1172faccc2f7ded7c60e00694282d93359c4682135642bc81f433574aa8ef0c97b4ade7ca372c5ffc23c7eddd839bab4e0f14d6df15c9dbeab176bec8b5701cf054eb3072f6dadc98f88819042bf10c407516ee58bce33fbe3b3d86a54255e577db4598e30a135361528c101683a5fcde7e8ba53f3456254be8f45fe3a56120ae96ea3773631fcb3873aa3abd91bcff00bd38bd43697a2e789e00da6077482e7b1b1a677b5afae4c54e6cbdf7377b694eb7d7a5b913476a5be923322d3de06060fd5e819635232a2cf4f0731da13b8546d1d6d4f8d75b9fce6c2341a71b0ea6f780df54bfdb0dd5cd9855179f602f9172307c7268724c3618e6817abd793adc214a0dc0bc616816632f27ea336fb56dfd"
@@ -106,9 +114,50 @@ let bolt4Tests1 =
             Expect.equal nextPacket4.HMAC ("0000000000000000000000000000000000000000000000000000000000000000" |> hex.DecodeData |> uint256) ""
             ()
 
+        testCase "Create packet (reference variable length test vector)" <| fun _ ->
+            let (onion, _ss) =
+                let p = PacketAndSecrets.Create (sessionKey, pubKeys, tlvPayloads, associatedData, PacketFiller.DeterministicPacketFiller)
+                (p.Packet, p.SharedSecrets)
+            let expectedPacket =
+                "0002eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619e5f14350c2a76fc232b5e46d421e9615471ab9e0bc887beff8c95fdb878f7b3a710f8eaf9ccc768f66bb5dec1f7827f33c43fe2ddd05614c8283aa78e9e7573f87c50f7d61ab590531cf08000178a333a347f8b4072e1cea42da7552402b10765adae3f581408f35ff0a71a34b78b1d8ecae77df96c6404bae9a8e8d7178977d7094a1ae549f89338c0777551f874159eb42d3a59fb9285ad4e24883f27de23942ec966611e99bee1cee503455be9e8e642cef6cef7b9864130f692283f8a973d47a8f1c1726b6e59969385975c766e35737c8d76388b64f748ee7943ffb0e2ee45c57a1abc40762ae598723d21bd184e2b338f68ebff47219357bd19cd7e01e2337b806ef4d717888e129e59cd3dc31e6201ccb2fd6d7499836f37a993262468bcb3a4dcd03a22818aca49c6b7b9b8e9e870045631d8e039b066ff86e0d1b7291f71cefa7264c70404a8e538b566c17ccc5feab231401e6c08a01bd5edfc1aa8e3e533b96e82d1f91118d508924b923531929aea889fcdf057f5995d9731c4bf796fb0e41c885d488dcbc68eb742e27f44310b276edc6f652658149e7e9ced4edde5d38c9b8f92e16f6b4ab13d710ee5c193921909bdd75db331cd9d7581a39fca50814ed8d9d402b86e7f8f6ac2f3bca8e6fe47eb45fbdd3be21a8a8d200797eae3c9a0497132f92410d804977408494dff49dd3d8bce248e0b74fd9e6f0f7102c25ddfa02bd9ad9f746abbfa3379834bc2380d58e9d23237821475a1874484783a15d68f47d3dc339f38d9bf925655d5c946778680fd6d1f062f84128895aff09d35d6c92cca63d3f95a9ee8f2a84f383b4d6a087533e65de12fc8dcaf85777736a2088ff4b22462265028695b37e70963c10df8ef2458756c73007dc3e544340927f9e9f5ea4816a9fd9832c311d122e9512739a6b4714bba590e31caa143ce83cb84b36c738c60c3190ff70cd9ac286a9fd2ab619399b68f1f7447be376ce884b5913c8496d01cbf7a44a60b6e6747513f69dc538f340bc1388e0fde5d0c1db50a4dcb9cc0576e0e2474e4853af9623212578d502757ffb2e0e749695ed70f61c116560d0d4154b64dcf3cbf3c91d89fb6dd004dc19588e3479fcc63c394a4f9e8a3b8b961fce8a532304f1337f1a697a1bb14b94d2953f39b73b6a3125d24f27fcd4f60437881185370bde68a5454d816e7a70d4cea582effab9a4f1b730437e35f7a5c4b769c7b72f0346887c1e63576b2f1e2b3706142586883f8cf3a23595cc8e35a52ad290afd8d2f8bcd5b4c1b891583a4159af7110ecde092079209c6ec46d2bda60b04c519bb8bc6dffb5c87f310814ef2f3003671b3c90ddf5d0173a70504c2280d31f17c061f4bb12a978122c8a2a618bb7d1edcf14f84bf0fa181798b826a254fca8b6d7c81e0beb01bd77f6461be3c8647301d02b04753b0771105986aa0cbc13f7718d64e1b3437e8eef1d319359914a7932548c91570ef3ea741083ca5be5ff43c6d9444d29df06f76ec3dc936e3d180f4b6d0fbc495487c7d44d7c8fe4a70d5ff1461d0d9593f3f898c919c363fa18341ce9dae54f898ccf3fe792136682272941563387263c51b2a2f32363b804672cc158c9230472b554090a661aa81525d11876eefdcc45442249e61e07284592f1606491de5c0324d3af4be035d7ede75b957e879e9770cdde2e1bbc1ef75d45fe555f1ff6ac296a2f648eeee59c7c08260226ea333c285bcf37a9bbfa57ba2ab8083c4be6fc2ebe279537d22da96a07392908cf22b233337a74fe5c603b51712b43c3ee55010ee3d44dd9ba82bba3145ec358f863e04bbfa53799a7a9216718fd5859da2f0deb77b8e315ad6868fdec9400f45a48e6dc8ddbaeb3"
+                |> hex.DecodeData
+
+            CheckArrayEqual (onion.ToBytes()) (expectedPacket)
+            let { Payload = payload0; NextPacket = nextPacket0; SharedSecret = _ss0 }: ParsedPacket =
+                Sphinx.parsePacket (privKeys.[0]) (associatedData) (expectedPacket)
+                |> fun rr -> 
+                    Expect.isOk (Result.ToFSharpCoreResult rr) ""
+                    Result.defaultWith (fun _ -> failwith "Unreachable") rr
+            let { Payload = payload1; NextPacket = nextPacket1; }: ParsedPacket =
+                Sphinx.parsePacket (privKeys.[1]) (associatedData) (nextPacket0.ToBytes())
+                |> Result.defaultWith(fun _ -> failwith "Fail: bolt4 create packet ref test vector defaultClosure1")
+            let { Payload = payload2; NextPacket = nextPacket2; }: ParsedPacket =
+                Sphinx.parsePacket (privKeys.[2]) (associatedData) (nextPacket1.ToBytes())
+                |> Result.defaultWith(fun _ -> failwith "Fail: bolt4 create packet ref test vector defaultClosure2")
+            let { Payload = payload3; NextPacket = nextPacket3; }: ParsedPacket =
+                Sphinx.parsePacket (privKeys.[3]) (associatedData) (nextPacket2.ToBytes())
+                |> Result.defaultWith(fun _ -> failwith "Fail: bolt4 create packet ref test vector defaultClosure3")
+            let { Payload = payload4; NextPacket = nextPacket4; }: ParsedPacket =
+                Sphinx.parsePacket (privKeys.[4]) (associatedData) (nextPacket3.ToBytes())
+                |> Result.defaultWith(fun _ -> failwith "Fail: bolt4 create packet ref test vector defaultClosure1")
+
+            System.Console.WriteLine(payload0)
+            System.Console.WriteLine(payload1)
+            System.Console.WriteLine(payload2)
+            System.Console.WriteLine(payload3)
+            System.Console.WriteLine(payload4)
+
+            (*Expect.equal nextPacket0.HMAC ("2bdc5227c8eb8ba5fcfc15cfc2aa578ff208c106646d0652cd289c0a37e445bb" |> hex.DecodeData |> uint256) ""
+            Expect.equal nextPacket1.HMAC ("28430b210c0af631ef80dc8594c08557ce4626bdd3593314624a588cc083a1d9" |> hex.DecodeData |> uint256) ""
+            Expect.equal nextPacket2.HMAC ("4e888d0cc6a90e7f857af18ac858834ac251d0d1c196d198df48a0c5bf816803" |> hex.DecodeData |> uint256) ""
+            Expect.equal nextPacket3.HMAC ("42c10947e06bda75b35ac2a9e38005479a6feac51468712e751c71a1dcf3e31b" |> hex.DecodeData |> uint256) ""
+            Expect.equal nextPacket4.HMAC ("0000000000000000000000000000000000000000000000000000000000000000" |> hex.DecodeData |> uint256) ""*)
+            ()
+
+
         testCase "last node replies with an error message" <| fun _ ->
             let (onion, ss) =
-                let p = PacketAndSecrets.Create (sessionKey, pubKeys, payloads, associatedData)
+                let p = PacketAndSecrets.Create (sessionKey, pubKeys, payloads, associatedData , PacketFiller.BlankPacketFiller)
                 (p.Packet, p.SharedSecrets)
             let { NextPacket = packet1; SharedSecret = ss0 }: ParsedPacket =
                 Sphinx.parsePacket (privKeys.[0]) (associatedData) (onion.ToBytes())
@@ -166,7 +215,7 @@ let bolt4Tests1 =
 
         testCase "Intermediate node replies with an error message" <| fun _ ->
             let { Packet = packet; SharedSecrets = ss } =
-                Sphinx.PacketAndSecrets.Create(sessionKey, pubKeys, payloads, associatedData)
+                Sphinx.PacketAndSecrets.Create(sessionKey, pubKeys, payloads, associatedData, PacketFiller.BlankPacketFiller)
             let { NextPacket = packet1; SharedSecret = ss0 } =
                 Sphinx.parsePacket(privKeys.[0]) (associatedData) (packet.ToBytes())
                 |> Result.defaultWith(fun _ -> failwith "Fail: bolt4 intrm node replies with err msg defaultClosure0")
