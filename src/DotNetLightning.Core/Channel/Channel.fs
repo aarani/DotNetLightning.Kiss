@@ -476,6 +476,18 @@ and Channel = {
                 return (acceptChannelMsg, channelWaitingForFundingCreated)
             }
 
+        member this.SpendableBalance(): LNMoney =
+            let remoteNextCommitInfoOpt =
+                match this.State with
+                | ChannelState.WaitForFundingConfirmed _ -> None
+                | ChannelState.WaitForFundingLocked _ -> None
+                | ChannelState.Normal data -> Some data.RemoteNextCommitInfo
+                | ChannelState.Shutdown data -> Some data.RemoteNextCommitInfo
+                | ChannelState.Negotiating data -> Some data.RemoteNextCommitInfo
+                | ChannelState.Closing data -> Some data.RemoteNextCommitInfo
+            this.Commitments.SpendableBalance remoteNextCommitInfoOpt
+
+
 module Channel =
 
     let private hex = NBitcoin.DataEncoders.HexEncoder()
@@ -663,7 +675,7 @@ module Channel =
         | ChannelState.Normal state, MonoHopUnidirectionalPayment op when state.LocalShutdown.IsSome || state.RemoteShutdown.IsSome ->
             sprintf "Could not send mono-hop unidirectional payment %A since shutdown is already in progress." op
             |> apiMisuse
-        | ChannelState.Normal _state, MonoHopUnidirectionalPayment op ->
+        | ChannelState.Normal state, MonoHopUnidirectionalPayment op ->
             result {
                 let payment: MonoHopUnidirectionalPaymentMsg = {
                     ChannelId = cs.Commitments.ChannelId()
@@ -672,8 +684,8 @@ module Channel =
                 let commitments1 = cs.Commitments.AddLocalProposal(payment)
 
                 let remoteCommit1 =
-                    match commitments1.RemoteNextCommitInfo with
-                    | RemoteNextCommitInfo.Waiting info -> info.NextRemoteCommit
+                    match state.RemoteNextCommitInfo with
+                    | RemoteNextCommitInfo.Waiting nextRemoteCommit -> nextRemoteCommit
                     | RemoteNextCommitInfo.Revoked _info -> commitments1.RemoteCommit
                 let! reduced = remoteCommit1.Spec.Reduce(commitments1.RemoteChanges.ACKed, commitments1.LocalChanges.Proposed) |> expectTransactionError
                 do! Validation.checkOurMonoHopUnidirectionalPaymentIsAcceptableWithCurrentSpec reduced commitments1 payment

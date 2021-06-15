@@ -231,11 +231,13 @@ type Commitments = {
 
             {Amounts.ToLocal = toLocalAmount; ToRemote = toRemoteAmount}
 
-        member this.SpendableBalance(): LNMoney =
+        member this.SpendableBalance (remoteNextCommitInfoOpt: Option<RemoteNextCommitInfo>)
+                                         : LNMoney =
             let remoteCommit =
-                match this.RemoteNextCommitInfo with
-                | RemoteNextCommitInfo.Waiting info -> info.NextRemoteCommit
-                | RemoteNextCommitInfo.Revoked _info -> this.RemoteCommit
+                match remoteNextCommitInfoOpt with
+                | Some (RemoteNextCommitInfo.Waiting nextRemoteCommit) -> nextRemoteCommit
+                | Some (RemoteNextCommitInfo.Revoked _info) -> this.RemoteCommit
+                | None -> this.RemoteCommit
             let reducedRes =
                 remoteCommit.Spec.Reduce(
                     this.RemoteChanges.ACKed,
